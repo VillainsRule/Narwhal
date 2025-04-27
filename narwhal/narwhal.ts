@@ -1,0 +1,111 @@
+import axios from 'axios';
+import Bun from 'bun';
+
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const envPath = path.join(import.meta.dirname, '..', '.env');
+const envTemplatePath = path.join(import.meta.dirname, '..', '.env.example');
+if (!fs.existsSync(envPath)) {
+    fs.cpSync(envTemplatePath, envPath);
+    console.log('Created a .env file. Please fill in your credentials.');
+    process.exit(1);
+}
+
+axios.defaults.headers.common['Accept'] = 'application/json, text/plain, */*';
+axios.defaults.headers.common['Accept-Encoding'] = 'gzip, deflate, br, zstd';
+axios.defaults.headers.common['Accept-Language'] = 'en-US,en;q=0.9';
+axios.defaults.headers.common['Origin'] = 'https://edpuzzle.com';
+axios.defaults.headers.common['Referer'] = 'https://edpuzzle.com/';
+axios.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+axios.defaults.headers.common['X-Chrome-Version'] = '134';
+axios.defaults.headers.common['X-Edpuzzle-Preferred-Language'] = 'en';
+axios.defaults.headers.common['X-Edpuzzle-Referrer'] = 'https://edpuzzle.com/';
+
+const { headers: csrfHeaders, data: firstVersionPartReq } = await axios.get('https://edpuzzle.com/');
+
+const csrfCookie = csrfHeaders['set-cookie']?.[0]?.split(';')[0]! + ';';
+const firstVersionPart = firstVersionPartReq.replaceAll(' ', '').match(/version:"(.*?)",/)[1];
+
+const { data: { CSRFToken: csrf } } = await axios.get('https://edpuzzle.com/api/v3/csrf', {
+    headers: {
+        'cookie': csrfCookie
+    }
+});
+
+const request = {
+    username: Bun.env.ACCOUNT_EMAIL,
+    password: Bun.env.ACCOUNT_PASSWORD,
+    role: 'teacher'
+};
+
+const md5Hash = crypto.createHash('md5').update(JSON.stringify(request)).digest('hex').slice(0, 4);
+const multiplyBy = Number(firstVersionPart.split('.')[2]) + 10;
+const goofyAhhAnticheat = Math.floor(Date.now() / 1000) * multiplyBy;
+
+const loginResponse = await fetch('https://edpuzzle.com/api/v3/users/login', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': JSON.stringify(request).length.toString(),
+        'cookie': csrfCookie,
+        'x-chrome-version': '134',
+        'x-csrf-token': csrf,
+        'x-edpuzzle-preferred-language': 'en',
+        'x-edpuzzle-referrer': 'https://edpuzzle.com/discover',
+        'x-edpuzzle-web-version': firstVersionPart + '.' + md5Hash + goofyAhhAnticheat
+    },
+    body: JSON.stringify(request)
+});
+
+const Authorization = loginResponse.headers.get('authorization')?.replace('Bearer ', '')!;
+console.log('Logged in! Authorization:', Authorization);
+if (!Authorization.trim().startsWith('ey')) {
+    console.error('This authorization token does not appear to be valid.');
+    console.error('If it is blank or does not start with "ey", please open an issue on Github:');
+    console.error('https://github.com/VillainsRule/Narwhal/issues');
+    console.error('The program will try it, but it will not send any answers if it is invalid.');
+}
+
+Bun.serve({
+    port: process.env.PORT ? Number(process.env.PORT) : 2299,
+
+    fetch: async (request) => {
+        const url = new URL(request.url);
+
+        if (url.pathname.match(/\/api\/v3\/media\/[0-9a-f]{1,30}/)) {
+            const mediaID = url.pathname.split('/').pop();
+            console.log('got media ID', mediaID);
+
+            const data = await axios.get(`https://edpuzzle.com/api/v3/media/${url.pathname.split('/').pop()}`, {
+                headers: {
+                    'x-edpuzzle-referrer': `https://edpuzzle.com/media/${mediaID}`,
+                    cookie: csrfCookie + ` token=${Authorization};`
+                },
+                validateStatus: (status) => !!status
+            });
+
+            return new Response(JSON.stringify(data.data), {
+                status: data.status,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Set-Cookie': data.headers['set-cookie']?.[0]?.split(';')[0] + ';',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Private-Network': 'true'
+                }
+            });
+        }
+
+        return new Response(':P', {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'text/plain',
+                'Access-Control-Allow-Private-Network': 'true'
+            }
+        });
+    },
+});
+
+console.log('http://localhost:' + (process.env.PORT || '2299'));
