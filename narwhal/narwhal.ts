@@ -69,7 +69,7 @@ if (!Authorization.trim().startsWith('ey')) {
 }
 
 Bun.serve({
-    port: process.env.PORT ? Number(process.env.PORT) : 2299,
+    port: Bun.env.PORT ? Number(Bun.env.PORT) : 2299,
 
     fetch: async (request) => {
         const url = new URL(request.url);
@@ -108,4 +108,4 @@ Bun.serve({
     },
 });
 
-console.log('http://localhost:' + (process.env.PORT || '2299'));
+console.log('http://localhost:' + (Bun.env.PORT || '2299'));
