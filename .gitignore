@@ -4,6 +4,8 @@ bun.lock
 
 # protected
 .env
+.wrangler
+wrangler.jsonc
 
 # mac conf
 .DS_Store

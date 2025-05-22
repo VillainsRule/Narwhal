@@ -1,0 +1,14 @@
+{
+    "name": "narwhal",
+    "compatibility_date": "2025-04-10",
+    "main": "workers/narwhal.ts",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "kv_namespaces": [
+        {
+            "binding": "narwhal",
+            "id": "ENTER_ID_THE_README_TOLD_YOU_TO_HERE"
+        }
+    ]
+}
