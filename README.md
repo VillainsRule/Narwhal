@@ -1,4 +1,7 @@
-usage
+<h2 align='center'>narwhal</h2>
+<h4 align='center'>a predeployed worker is available at https://n2.villainsrule.xyz!</h4>
+
+<br>
 
 ### bun version
 
