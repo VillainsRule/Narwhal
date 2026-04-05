@@ -1,11 +1,14 @@
 {
     "name": "narwhal",
     "main": "narwhal/narwhal.ts",
-    "dependencies": {
-        "axios": "^1.9.0"
-    },
     "devDependencies": {
-        "@types/bun": "^1.2.10",
-        "@types/node": "^22.15.2"
+        "@cloudflare/workers-types": "^4.20260402.1",
+        "@types/bun": "^1.2.10"
+    },
+    "scripts": {
+        "dev": "wrangler dev"
+    },
+    "dependencies": {
+        "wrangler": "^4.80.0"
     }
 }

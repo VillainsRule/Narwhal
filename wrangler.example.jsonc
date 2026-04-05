@@ -10,5 +10,9 @@
             "binding": "narwhal",
             "id": "ENTER_ID_THE_README_TOLD_YOU_TO_HERE"
         }
-    ]
+    ],
+    "vars": {
+        "EDPUZZLE_ACCOUNT_EMAIL": "ENTER_YOUR_EMAIL_HERE",
+        "EDPUZZLE_ACCOUNT_PASSWORD": "ENTER_YOUR_PASSWORD_HERE"
+    }
 }

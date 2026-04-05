@@ -2,8 +2,7 @@
 node_modules
 bun.lock
 
-# protected
-.env
+# wrangler
 .wrangler
 wrangler.jsonc
 

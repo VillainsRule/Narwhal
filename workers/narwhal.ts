@@ -1,42 +1,60 @@
-import axios from 'axios';
 import crypto from 'node:crypto';
 
-const ACCOUNT_EMAIL = 'ADD_EDPUZZLE_TEACHER_EMAIL_HERE';
-const ACCOUNT_PASSWORD = 'ADD_EDPUZZLE_TEACHER_PASSWORD_HERE';
+import type { KVNamespace } from '@cloudflare/workers-types';
+
+interface Env {
+    EDPUZZLE_ACCOUNT_EMAIL: string;
+    EDPUZZLE_ACCOUNT_PASSWORD: string;
+    narwhal: KVNamespace;
+}
 
 export default {
-    async fetch(request: Request, env): Promise<Response> {
-        const kv = env.narwhal;
+    async fetch(request: Request, env: Env): Promise<Response> {
+        const url = new URL(request.url);
+        if (url.pathname === '/') return new Response('very cool program\n\nhttps://github.com/VillainsRule/Narwhal', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+        if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 });
+        if (url.pathname === '/robots.txt') return new Response('User-agent: *\nDisallow: /', { status: 200, headers: { 'Content-Type': 'text/plain' } });
 
-        axios.defaults.headers.common['Accept'] = 'application/json, text/plain, */*';
-        axios.defaults.headers.common['Accept-Encoding'] = 'gzip, deflate, br, zstd';
-        axios.defaults.headers.common['Accept-Language'] = 'en-US,en;q=0.9';
-        axios.defaults.headers.common['Origin'] = 'https://edpuzzle.com';
-        axios.defaults.headers.common['Referer'] = 'https://edpuzzle.com/';
-        axios.defaults.headers.common['User-Agent'] = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
-        axios.defaults.headers.common['X-Chrome-Version'] = '134';
-        axios.defaults.headers.common['X-Edpuzzle-Preferred-Language'] = 'en';
-        axios.defaults.headers.common['X-Edpuzzle-Referrer'] = 'https://edpuzzle.com/';
-
-        const expiry = await kv.get('expiry');
+        const expiry = await env.narwhal.get('expiry');
 
         if (!expiry || Number(expiry) < Date.now()) {
-            const { headers: csrfHeaders, data: firstVersionPartReq } = await axios.get('https://edpuzzle.com/');
-
-            const csrfCookieHeader = (typeof csrfHeaders['set-cookie'] === 'object' ? csrfHeaders['set-cookie']![0] : csrfHeaders['set-cookie']) as string;
-            const csrfCookie = csrfCookieHeader.split(';')[0] + ';';
-
-            const firstVersionPart = firstVersionPartReq.replaceAll(' ', '').match(/version:"(.*?)",/)[1];
-
-            const { data: { CSRFToken: csrf } } = await axios.get('https://edpuzzle.com/api/v3/csrf', {
+            const homeReq = await fetch('https://edpuzzle.com/', {
                 headers: {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Origin': 'https://edpuzzle.com',
+                    'Referer': 'https://edpuzzle.com/',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'
+                }
+            });
+
+            const firstVersionPartReq = await homeReq.text();
+
+            const csrfCookie = homeReq.headers.get('set-cookie')!.split(';')[0] + ';';
+            const firstVersionPart = firstVersionPartReq.replaceAll(' ', '').match(/version:"(.*?)",/)![1];
+
+            const csrfReq = await fetch('https://edpuzzle.com/api/v3/csrf', {
+                headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Origin': 'https://edpuzzle.com',
+                    'Referer': 'https://edpuzzle.com/',
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+                    'X-Chrome-Version': '144',
+                    'X-Edpuzzle-Preferred-Language': 'en',
+                    'X-Edpuzzle-Referrer': 'https://edpuzzle.com/',
                     'cookie': csrfCookie
                 }
             });
 
+            const csrfRes = await csrfReq.json() as { CSRFToken: string };
+            const csrf = csrfRes.CSRFToken;
+
             const request = {
-                username: ACCOUNT_EMAIL,
-                password: ACCOUNT_PASSWORD,
+                username: env.EDPUZZLE_ACCOUNT_EMAIL,
+                password: env.EDPUZZLE_ACCOUNT_PASSWORD,
                 role: 'teacher'
             };
 
@@ -69,40 +87,47 @@ export default {
                 console.error('The program will try it, but it will not send any answers if it is invalid.');
             }
 
-            await kv.put('expiry', Date.now() + 1000 * 60 * 60);
-            await kv.put('authorization', Authorization);
-            await kv.put('csrfCookie', csrfCookie);
+            await env.narwhal.put('expiry', (Date.now() + 1000 * 60 * 60).toString());
+            await env.narwhal.put('authorization', Authorization);
+            await env.narwhal.put('csrfCookie', csrfCookie);
         }
 
-        const Authorization = await kv.get('authorization');
-        const csrfCookie = await kv.get('csrfCookie');
-
-        const url = new URL(request.url);
+        const Authorization = await env.narwhal.get('authorization');
+        const csrfCookie = await env.narwhal.get('csrfCookie');
 
         if (url.pathname.match(/\/api\/v3\/media\/[0-9a-f]{1,30}/)) {
             const mediaID = url.pathname.split('/').pop();
             console.log('got media ID', mediaID);
 
-            const data = await axios.get(`https://edpuzzle.com/api/v3/media/${url.pathname.split('/').pop()}`, {
+            const mediaReq = await fetch(`https://edpuzzle.com/api/v3/media/${url.pathname.split('/').pop()}`, {
                 headers: {
+                    'Accept': 'application/json, text/plain, */*',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Origin': 'https://edpuzzle.com',
+                    'Referer': `https://edpuzzle.com/media/${mediaID}`,
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0 Safari/537.36',
+                    'X-Chrome-Version': '134',
+                    'X-Edpuzzle-Preferred-Language': 'en',
                     'x-edpuzzle-referrer': `https://edpuzzle.com/media/${mediaID}`,
                     cookie: csrfCookie + ` token=${Authorization};`
-                },
-                validateStatus: (status) => !!status
+                }
             });
 
-            return new Response(JSON.stringify(data.data), {
-                status: data.status,
+            const mediaRes = await mediaReq.json();
+
+            return new Response(JSON.stringify(mediaRes), {
+                status: mediaReq.status,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Set-Cookie': data.headers['set-cookie']?.[0]?.split(';')[0] + ';',
+                    'Set-Cookie': mediaReq.headers.get('set-cookie') || '',
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Allow-Private-Network': 'true'
                 }
             });
         }
 
-        return new Response(':P', {
+        return new Response('404 Not Found', {
             status: 200,
             headers: {
                 'Access-Control-Allow-Origin': '*',
