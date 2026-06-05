@@ -7,7 +7,7 @@
 
 <h2 align='center'>setup</h2>
 
-1. install [bun](https://bun.sh)
+1. install [bun](https://bun.sh) (node also supported)
 2. `bun install`
 3. `bunx wrangler login`
 4. login to cloudflare
